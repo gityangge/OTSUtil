@@ -1,0 +1,9 @@
+ots\annotation\OTSClass.class
+ots\util\impl\OTSUtilImpl.class
+ots\util\OTSUtil.class
+ots\annotation\OTSPrimaryKeyType.class
+ots\annotation\OTSPrimaryKey.class
+ots\annotation\OTSColumn.class
+ots\annotation\OTSChildClass.class
+ots\annotation\OTSColumnType.class
+ots\util\impl\OTSUtilImpl$1.class
