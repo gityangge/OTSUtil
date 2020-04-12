@@ -1,4 +1,5 @@
 package ots.util.impl;
+
 import com.alicloud.openservices.tablestore.SyncClient;
 import com.alicloud.openservices.tablestore.model.*;
 import com.google.common.collect.Lists;
@@ -12,6 +13,7 @@ import ots.util.OTSUtil;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.util.Iterator;
 import java.util.List;
 
 public class OTSUtilImpl implements OTSUtil {
@@ -22,7 +24,6 @@ public class OTSUtilImpl implements OTSUtil {
         this.client = client;
     }
 
-    @Override
     public <T> T serchByPrimaryKey(T t) throws Exception {
         Class<T> clz = (Class<T>) t.getClass();
         String tableName = checkOTSAnnotationAndReturnTableName(clz);
@@ -39,7 +40,6 @@ public class OTSUtilImpl implements OTSUtil {
         return loadResult(clz, row);
     }
 
-    @Override
     public <T> List<T> serchRange(Class<T> clz, RangeRowQueryCriteria rangeRowQueryCriteria) throws Exception {
         GetRangeResponse getRangeResponse = client.getRange(new GetRangeRequest(rangeRowQueryCriteria));
         List<T> resultList = Lists.newArrayList();
@@ -52,11 +52,25 @@ public class OTSUtilImpl implements OTSUtil {
         return resultList;
     }
 
-    private <T> void loadOTSClass(T t, PrimaryKeyBuilder primaryKeyBuilder, List<Column> columnList) throws Exception {
-        loadOTSClass(t, primaryKeyBuilder, columnList,"", null);
+    public <T> List<T> searchRangeByIterator(Class<T> clz, RangeIteratorParameter rangeIteratorParameter)
+            throws Exception {
+        Iterator<Row> iterator = client.createRangeIterator(rangeIteratorParameter);
+        List<T> resultList = Lists.newArrayList();
+        while (iterator.hasNext()) {
+            Row row = iterator.next();
+            T t = loadResult(clz, row);
+            if (t != null) {
+                resultList.add(t);
+            }
+        }
+        return resultList;
     }
 
-    private <T> void loadOTSClass(T t, PrimaryKeyBuilder primaryKeyBuilder, List<Column> columnList,String domain, Integer id) throws Exception {
+    private <T> void loadOTSClass(T t, PrimaryKeyBuilder primaryKeyBuilder, List<Column> columnList) throws Exception {
+        loadOTSClass(t, primaryKeyBuilder, columnList, "", null);
+    }
+
+    private <T> void loadOTSClass(T t, PrimaryKeyBuilder primaryKeyBuilder, List<Column> columnList, String domain, Integer id) throws Exception {
         Class<T> clz = (Class<T>) t.getClass();
         Field[] fields = clz.getDeclaredFields();
         for (Field field : fields) {
@@ -76,10 +90,10 @@ public class OTSUtilImpl implements OTSUtil {
                                     PrimaryKeyValue.fromString((String) value));
                             break;
                         case LONG:
-                            if(value instanceof Integer){
+                            if (value instanceof Integer) {
                                 primaryKeyBuilder.addPrimaryKeyColumn(keyName,
                                         PrimaryKeyValue.fromLong((Integer) value));
-                            }else {
+                            } else {
                                 primaryKeyBuilder.addPrimaryKeyColumn(keyName,
                                         PrimaryKeyValue.fromLong((Long) value));
                             }
@@ -102,9 +116,9 @@ public class OTSUtilImpl implements OTSUtil {
                             columnList.add(new Column(keyName, ColumnValue.fromString((String) value)));
                             break;
                         case LONG:
-                            if(value instanceof Integer){
+                            if (value instanceof Integer) {
                                 columnList.add(new Column(keyName, ColumnValue.fromLong((Integer) value)));
-                            }else {
+                            } else {
                                 columnList.add(new Column(keyName, ColumnValue.fromLong((Long) value)));
                             }
                             break;
@@ -134,7 +148,7 @@ public class OTSUtilImpl implements OTSUtil {
     }
 
     private <T> T loadResult(Class<T> clz, Row row) throws Exception {
-        return loadResult(clz, row,"", null);
+        return loadResult(clz, row, "", null);
     }
 
     private <T> T loadResult(Class<T> clz, Row row, String domain, Integer id) throws Exception {
@@ -162,9 +176,9 @@ public class OTSUtilImpl implements OTSUtil {
                         }
                         case LONG: {
                             Long value = row.getPrimaryKey().getPrimaryKeyColumnsMap().get(keyName).getValue().asLong();
-                            if(fieldType == Integer.class || fieldType == int.class){
+                            if (fieldType == Integer.class || fieldType == int.class) {
                                 field.set(result, value.intValue());
-                            }else {
+                            } else {
                                 field.set(result, value);
                             }
                             break;
@@ -193,9 +207,9 @@ public class OTSUtilImpl implements OTSUtil {
                             field.set(result, columnValue.asString());
                             break;
                         case LONG:
-                            if(fieldType == Integer.class || fieldType == int.class){
+                            if (fieldType == Integer.class || fieldType == int.class) {
                                 field.set(result, new Long(columnValue.asLong()).intValue());
-                            }else {
+                            } else {
                                 field.set(result, columnValue.asLong());
                             }
                             break;
@@ -212,19 +226,19 @@ public class OTSUtilImpl implements OTSUtil {
                     break;
                 } else if (annotation.annotationType() == OTSChildClass.class) {
                     String keyName = getKeyName("", field.getName(), domain, id);
-                    if(field.getType().isArray()) {
+                    if (field.getType().isArray()) {
                         Class childClz = field.getType().getComponentType();
-                        int i =0;
+                        int i = 0;
                         List<Object> resultBuffer = Lists.newArrayList();
-                        while(true){
+                        while (true) {
                             Object c = loadResult(childClz, row, keyName + ".", i++);
-                            if(c == null){
+                            if (c == null) {
                                 break;
                             }
                             resultBuffer.add(childClz.cast(c));
                         }
                         field.set(result, listTransferArray(resultBuffer, childClz));
-                    }else {
+                    } else {
                         Object child = loadResult(field.getType(), row, keyName + ".", 0);
                         field.set(result, child);
                     }
@@ -234,23 +248,23 @@ public class OTSUtilImpl implements OTSUtil {
         return result;
     }
 
-    private <T> T[] listTransferArray(List<Object> list, Class<T> clz){
-        if(list == null){
+    private <T> T[] listTransferArray(List<Object> list, Class<T> clz) {
+        if (list == null) {
             return null;
         }
         T[] array = (T[]) Array.newInstance(clz, list.size());
-        for(int i = 0; i < list.size(); i++){
+        for (int i = 0; i < list.size(); i++) {
             array[i] = (T) list.get(i);
         }
         return array;
     }
 
-    private String getKeyName(String keyName, String def, String domain, Integer id){
+    private String getKeyName(String keyName, String def, String domain, Integer id) {
         if (keyName == null || StringUtils.isEmpty(keyName)) {
             keyName = def;
         }
         keyName = domain + keyName;
-        if(id != null){
+        if (id != null) {
             keyName = keyName + id;
         }
         return keyName;
